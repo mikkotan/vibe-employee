@@ -1,0 +1,84 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                String              @id @default(cuid())
+  email             String              @unique
+  password          String              // Hashed with bcrypt
+  createdAt         DateTime            @default(now())
+  timeTrackerConfig TimeTrackerConfig?
+  schedule          Schedule?
+  timeLogs          TimeLog[]
+  excludedDates     ExcludedDate[]
+}
+
+model TimeTrackerConfig {
+  id                      String   @id @default(cuid())
+  userId                  String   @unique
+  user                    User     @relation(fields: [userId], references: [id])
+  trackerUrl              String
+  trackerUsername         String
+  trackerPasswordEncrypted String  // AES-256-GCM encrypted
+
+  // CSS Selectors for automation
+  selectorUsername        String?  // CSS selector for username input
+  selectorPassword        String?  // CSS selector for password input
+  selectorLoginButton     String?  // CSS selector for login button
+  selectorTimeInButton    String?  // CSS selector for time-in button
+  selectorTimeOutButton   String?  // CSS selector for time-out button
+
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+}
+
+model Schedule {
+  id                          String   @id @default(cuid())
+  userId                      String   @unique
+  user                        User     @relation(fields: [userId], references: [id])
+
+  // Time In
+  timeInHour                  Int      // 0-23 (e.g., 14 = 2pm)
+  timeInMinute                Int      // 0-59 (e.g., 50)
+  timeInRandomWindowMinutes   Int      // e.g., 20 (executes 14:50-15:10)
+
+  // Time Out
+  timeOutHour                 Int      // 0-23 (e.g., 0 = 12am)
+  timeOutMinute               Int      // 0-59 (e.g., 0)
+  timeOutRandomWindowMinutes  Int      // e.g., 10 (executes 00:00-00:10)
+
+  timezone                    String   // e.g., "America/New_York"
+  enabled                     Boolean  @default(true)
+  skipWeekends                Boolean  @default(true)
+
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
+}
+
+model TimeLog {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id])
+  action        String   // "TIME_IN" | "TIME_OUT"
+  scheduledTime DateTime // When it was supposed to run
+  actualTime    DateTime // When it actually ran
+  status        String   // "SUCCESS" | "FAILED"
+  errorMessage  String?  // If failed
+  createdAt     DateTime @default(now())
+}
+
+model ExcludedDate {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  date      DateTime // Stored as start of day: 2025-01-15 00:00:00
+  reason    String   // "Vacation", "Holiday", "Sick Leave", etc.
+  createdAt DateTime @default(now())
+
+  @@index([userId, date])
+}

@@ -1,0 +1,109 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: locklock-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: locklock
+    ports:
+      - "9432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - locklock-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: locklock-redis
+    restart: unless-stopped
+    ports:
+      - "9379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - locklock-network
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: locklock-app
+    restart: unless-stopped
+    command: npm run dev
+    ports:
+      - "9000:3000"
+    env_file:
+      - .env.docker
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - locklock-network
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: locklock-worker
+    restart: unless-stopped
+    command: npm run worker
+    env_file:
+      - .env.docker
+    volumes:
+      - .:/app
+      - /app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - locklock-network
+
+  queue-ui:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: locklock-queue-ui
+    restart: unless-stopped
+    command: npm run queue-ui
+    ports:
+      - "9001:3001"
+    env_file:
+      - .env.docker
+    volumes:
+      - .:/app
+      - /app/node_modules
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - locklock-network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  locklock-network:
+    driver: bridge
